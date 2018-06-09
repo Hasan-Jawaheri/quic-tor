@@ -267,7 +267,7 @@ static config_var_t option_vars_[] = {
   OBSOLETE("CircuitIdleTimeout"),
   V(CircuitsAvailableTimeout,    INTERVAL, "0"),
   V(CircuitStreamTimeout,        INTERVAL, "0"),
-  V(CircuitPriorityHalflife,     DOUBLE,  "-1.0"), /*negative:'Use default'*/
+  V(CircuitPriorityHalflife,     DOUBLE,  "-100.0"), /*negative:'Use default'*/
   V(ClientDNSRejectInternalAddresses, BOOL,"1"),
   V(ClientOnly,                  BOOL,     "0"),
   V(ClientPreferIPv6ORPort,      AUTOBOOL, "auto"),
@@ -661,6 +661,11 @@ static config_var_t option_vars_[] = {
   V(TestingDirAuthVoteHSDir, ROUTERSET, NULL),
   V(TestingDirAuthVoteHSDirIsStrict,  BOOL,     "0"),
   VAR("___UsingTestNetworkDefaults", BOOL, UsingTestNetworkDefaults_, "0"),
+  // Quictor mod
+   VAR("ForceEntryNode",  STRING,   ForceEntryNode,  NULL),
+   VAR("ForceMiddleNode", STRING,   ForceMiddleNode, NULL),
+   VAR("ForceExitNode",   STRING,   ForceExitNode,   NULL),
+
 
   END_OF_CONFIG_VARS
 };

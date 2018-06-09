@@ -280,29 +280,48 @@ int
 connection_add_impl(connection_t *conn, int is_connecting)
 {
   tor_assert(conn);
-  tor_assert(SOCKET_OK(conn->s) ||
-             conn->linked ||
-             (conn->type == CONN_TYPE_AP &&
-              TO_EDGE_CONN(conn)->is_dns_request));
+  if(conn->use_quic)
+  tor_assert((conn->use_quic && QUICSOCK_OK(conn->q_sock)) ||
+               SOCKET_OK(conn->s) ||
+               conn->linked ||
+               (conn->type == CONN_TYPE_AP &&
+                TO_EDGE_CONN(conn)->is_dns_request));
+
+//  tor_assert(SOCKET_OK(conn->s) ||
+//             conn->linked ||
+//             (conn->type == CONN_TYPE_AP &&
+//              TO_EDGE_CONN(conn)->is_dns_request));
 
   tor_assert(conn->conn_array_index == -1); /* can only connection_add once */
   conn->conn_array_index = smartlist_len(connection_array);
   smartlist_add(connection_array, conn);
 
   (void) is_connecting;
+  if (conn->use_quic) {
+  	    // Do the handshakes with QUIC
+  	    int fd = qs_get_fd(conn->q_sock);
+  	    tor_assert(tor_libevent_get_base() != NULL);
+  	    tor_assert(conn->q_sock != NULL);
 
-  if (SOCKET_OK(conn->s) || conn->linked) {
-    conn->read_event = tor_event_new(tor_libevent_get_base(),
-         conn->s, EV_READ|EV_PERSIST, conn_read_callback, conn);
-    conn->write_event = tor_event_new(tor_libevent_get_base(),
-         conn->s, EV_WRITE|EV_PERSIST, conn_write_callback, conn);
-    /* XXXX CHECK FOR NULL RETURN! */
-  }
+  	    if (QUICSOCK_OK(conn->q_sock) || conn->linked) {
+  	      conn->read_event = tor_event_new(tor_libevent_get_base(),
+  	           fd, EV_READ|EV_PERSIST, conn_read_callback, conn);
+  	      conn->write_event = tor_event_new(tor_libevent_get_base(),
+  	                 fd, EV_WRITE|EV_PERSIST, conn_write_callback, conn);
+  	            /* XXXX CHECK FOR NULL RETURN! */
+  	          }
 
-  log_debug(LD_NET,"new conn type %s, socket %d, address %s, n_conns %d.",
-            conn_type_to_string(conn->type), (int)conn->s, conn->address,
-            smartlist_len(connection_array));
-
+  	          log_debug(LD_NET,"Adding QUIC conn: new conn type %s, socket %d, address %s, n_conns %d.",
+  	                    conn_type_to_string(conn->type), qs_get_fd(conn->q_sock), conn->address,
+  	                    smartlist_len(connection_array));
+  	        } else
+    if (SOCKET_OK(conn->s) || conn->linked) {
+      conn->read_event = tor_event_new(tor_libevent_get_base(),
+           conn->s, EV_READ|EV_PERSIST, conn_read_callback, conn);
+      conn->write_event = tor_event_new(tor_libevent_get_base(),
+           conn->s, EV_WRITE|EV_PERSIST, conn_write_callback, conn);
+      /* XXXX CHECK FOR NULL RETURN! */
+    }
   return 0;
 }
 
@@ -312,12 +331,12 @@ connection_unregister_events(connection_t *conn)
 {
   if (conn->read_event) {
     if (event_del(conn->read_event))
-      log_warn(LD_BUG, "Error removing read event for %d", (int)conn->s);
+        log_warn(LD_BUG, "Error removing read event for %d", conn->use_quic ? (int)qs_get_fd(conn->q_sock) : conn->s);
     tor_free(conn->read_event);
   }
   if (conn->write_event) {
     if (event_del(conn->write_event))
-      log_warn(LD_BUG, "Error removing write event for %d", (int)conn->s);
+        log_warn(LD_BUG, "Error removing write event for %d", conn->use_quic ? (int)qs_get_fd(conn->q_sock) : conn->s);
     tor_free(conn->write_event);
   }
   if (conn->type == CONN_TYPE_AP_DNS_LISTENER) {
@@ -336,10 +355,10 @@ connection_remove(connection_t *conn)
   connection_t *tmp;
 
   tor_assert(conn);
-
   log_debug(LD_NET,"removing socket %d (type %s), n_conns now %d",
-            (int)conn->s, conn_type_to_string(conn->type),
-            smartlist_len(connection_array));
+              conn->use_quic ? (int)qs_get_fd(conn->q_sock) : conn->s, conn_type_to_string(conn->type),
+              smartlist_len(connection_array));
+
 
   if (conn->type == CONN_TYPE_AP && conn->socket_family == AF_UNIX) {
     log_info(LD_NET, "Closing SOCKS Unix socket connection");
@@ -627,10 +646,10 @@ connection_stop_reading,(connection_t *conn))
     connection_stop_reading_from_linked_conn(conn);
   } else {
     if (event_del(conn->read_event))
-      log_warn(LD_NET, "Error from libevent setting read event state for %d "
-               "to unwatched: %s",
-               (int)conn->s,
-               tor_socket_strerror(tor_socket_errno(conn->s)));
+    	log_warn(LD_NET, "Error from libevent setting read event state for %d "
+    	               "to unwatched: %s",
+    	               conn->use_quic ? (int)qs_get_fd(conn->q_sock) : conn->s,
+    	               tor_socket_strerror(tor_socket_errno(conn->s)));
   }
 }
 
@@ -650,10 +669,10 @@ connection_start_reading,(connection_t *conn))
       connection_start_reading_from_linked_conn(conn);
   } else {
     if (event_add(conn->read_event, NULL))
-      log_warn(LD_NET, "Error from libevent setting read event state for %d "
-               "to watched: %s",
-               (int)conn->s,
-               tor_socket_strerror(tor_socket_errno(conn->s)));
+    	log_warn(LD_NET, "Error from libevent setting read event state for %d "
+    	               "to watched: %s",
+    	               conn->use_quic ? (int)qs_get_fd(conn->q_sock) : conn->s,
+    	               tor_socket_strerror(tor_socket_errno(conn->s)));
   }
 }
 
@@ -683,10 +702,10 @@ connection_stop_writing,(connection_t *conn))
       connection_stop_reading_from_linked_conn(conn->linked_conn);
   } else {
     if (event_del(conn->write_event))
-      log_warn(LD_NET, "Error from libevent setting write event state for %d "
-               "to unwatched: %s",
-               (int)conn->s,
-               tor_socket_strerror(tor_socket_errno(conn->s)));
+    	log_warn(LD_NET, "Error from libevent setting write event state for %d "
+    	               "to unwatched: %s",
+    	               conn->use_quic ? (int)qs_get_fd(conn->q_sock) : conn->s,
+    	               tor_socket_strerror(tor_socket_errno(conn->s)));
   }
 }
 
@@ -707,10 +726,15 @@ connection_start_writing,(connection_t *conn))
       connection_start_reading_from_linked_conn(conn->linked_conn);
   } else {
     if (event_add(conn->write_event, NULL))
+    	if (conn->use_quic) {
+    	        log_warn(LD_NET, "Error from libevent setting write event state for %d",
+    	               (int)qs_get_fd(conn->q_sock));
+    	      } else {
       log_warn(LD_NET, "Error from libevent setting write event state for %d "
                "to watched: %s",
                (int)conn->s,
                tor_socket_strerror(tor_socket_errno(conn->s)));
+    	      }
   }
 }
 
@@ -878,7 +902,14 @@ conn_read_callback(evutil_socket_t fd, short event, void *_conn)
   (void)fd;
   (void)event;
 
-  log_debug(LD_NET,"socket %d wants to read.",(int)conn->s);
+  if (conn->use_quic) {
+     tor_assert(conn->q_sock);
+     log_debug(LD_NET,"Got a callback on a quic-enabled socket %d: type %d, purpose: %d",
+                (int)qs_get_fd(conn->q_sock), conn->type, conn->purpose);
+   } else {
+
+     log_debug(LD_NET,"socket %d wants to read.",conn->s);
+   }
 
   /* assert_connection_ok(conn, time(NULL)); */
 
@@ -910,8 +941,15 @@ conn_write_callback(evutil_socket_t fd, short events, void *_conn)
   (void)fd;
   (void)events;
 
-  LOG_FN_CONN(conn, (LOG_DEBUG, LD_NET, "socket %d wants to write.",
-                     (int)conn->s));
+  if (conn->use_quic) {
+      tor_assert(conn->q_sock);
+  log_info(LD_NET,"Got a write callback on a quic-enabled socket %d: type %d, purpose: %d",
+                 (int)qs_get_fd(conn->q_sock), conn->type, conn->purpose);
+  log_debug(LD_NET,"Got a write callback on a quic-enabled socket %d: type %d, purpose: %d",
+                 (int)qs_get_fd(conn->q_sock), conn->type, conn->purpose);
+    } else {
+      LOG_FN_CONN(conn, (LOG_DEBUG, LD_NET, "socket %d wants to write.", conn->s));
+    }
 
   /* assert_connection_ok(conn, time(NULL)); */
 
@@ -3994,7 +4032,13 @@ tor_run_main(const tor_main_configuration_t *tor_cfg)
 
   int argc = tor_cfg->argc;
   char **argv = tor_cfg->argv;
+  const char *cert_path = getenv("QUICTOR_CERT_PATH");
+    const char *key_path = getenv("QUICTOR_KEY_PATH");
+    tor_assert(cert_path != NULL);
+    tor_assert(key_path != NULL);
 
+   // printf("Running QuicTor!\n");
+    qs_init(cert_path, key_path);
 #ifdef _WIN32
 #ifndef HeapEnableTerminationOnCorruption
 #define HeapEnableTerminationOnCorruption 1

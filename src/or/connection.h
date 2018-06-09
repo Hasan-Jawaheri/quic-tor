@@ -141,6 +141,24 @@ int connection_outbuf_too_full(connection_t *conn);
 int connection_handle_write(connection_t *conn, int force);
 int connection_flush(connection_t *conn);
 
+/* QUIC supported stream ID implementation */
+MOCK_DECL(void, connection_write_to_buf_impl_generic,
+          (const char *string, size_t len, connection_t *conn, int zlib,
+           quicsock_stream_id_t stream_id));
+
+// Public API
+static void connection_write_to_buf_generic(const char *string, size_t len,
+                                    connection_t *conn, streamid_t stream_id);
+// Private redirection
+static inline void
+connection_write_to_buf_generic(const char *string, size_t len, connection_t *conn,
+                                streamid_t stream_id)
+{
+  connection_write_to_buf_impl_generic(string, len, conn, 0,
+                                        (quicsock_stream_id_t)stream_id);
+}
+
+/*** QUIC code ends here ***/
 MOCK_DECL(void, connection_write_to_buf_impl_,
           (const char *string, size_t len, connection_t *conn, int zlib));
 /* DOCDOC connection_write_to_buf */

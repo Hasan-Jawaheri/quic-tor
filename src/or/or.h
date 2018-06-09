@@ -11,6 +11,7 @@
 
 #ifndef TOR_OR_H
 #define TOR_OR_H
+#include "quicsock/quicsock.h"
 
 #include "orconfig.h"
 
@@ -65,7 +66,6 @@
 #include <direct.h>
 #include <windows.h>
 #endif /* defined(_WIN32) */
-
 #include "crypto.h"
 #include "crypto_format.h"
 #include "tortls.h"
@@ -1196,6 +1196,8 @@ typedef struct packed_cell_t {
   char body[CELL_MAX_NETWORK_SIZE]; /**< Cell as packed for network. */
   uint32_t inserted_timestamp; /**< Time (in timestamp units) when this cell
                                 * was inserted */
+  streamid_t stream_id; /**< The stream that we are sending on for QUIC */
+
 } packed_cell_t;
 
 /** A queue of cells on a circuit, waiting to be added to the
@@ -1313,6 +1315,8 @@ struct buf_t;
  * to fill and drain these buffers.
  */
 typedef struct connection_t {
+	/** For QUIC SOCK usage */
+	    tor_quicsock_t q_sock;
   uint32_t magic; /**< For memory debugging: must equal one of
                    * *_CONNECTION_MAGIC. */
 
@@ -1376,6 +1380,8 @@ typedef struct connection_t {
                                         * said we could write? */
 
   time_t timestamp_created; /**< When was this connection_t created? */
+  time_t timestamp_lastwritten; /**< When was the last time libevent said we
+                                   * could write? */
 
   int socket_family; /**< Address family of this connection's socket.  Usually
                       * AF_INET, but it can also be AF_UNIX, or AF_INET6 */
@@ -1411,6 +1417,9 @@ typedef struct connection_t {
   /** Bytes written since last call to control_event_conn_bandwidth_used().
    * Only used if we're configured to emit CONN_BW events. */
   uint32_t n_written_conn_bw;
+
+
+    unsigned int use_quic:1; /**< Boolean: do we use quic socket */
 } connection_t;
 
 /** Subtype of connection_t; used for a listener socket. */
@@ -4615,6 +4624,11 @@ typedef struct {
   /** Bool (default: 0). Tells Tor to never try to exec another program.
    */
   int NoExec;
+
+  // Quictor mod
+   char *ForceEntryNode;
+   char *ForceMiddleNode;
+   char *ForceExitNode;
 
   /** Have the KIST scheduler run every X milliseconds. If less than zero, do
    * not use the KIST scheduler but use the old vanilla scheduler instead. If

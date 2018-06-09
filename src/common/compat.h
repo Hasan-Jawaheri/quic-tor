@@ -475,6 +475,13 @@ typedef int socklen_t;
 #define SOCKET_OK(s) ((SOCKET)(s) != INVALID_SOCKET)
 #define TOR_INVALID_SOCKET INVALID_SOCKET
 #else /* !(defined(_WIN32)) */
+
+
+// Assume libquic is always compiled in; might want to change later
+#define tor_quicsock_t quicsock_t
+#define TOR_QUICSOCK_T_FORMAT "%p"
+#define QUICSOCK_OK(s) ((s) != NULL)
+#define TOR_INVALID_QUICSOCK NULL
 /** Type used for a network socket. */
 #define tor_socket_t int
 #define TOR_SOCKET_T_FORMAT "%d"

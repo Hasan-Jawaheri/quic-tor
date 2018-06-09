@@ -694,6 +694,10 @@ connection_or_finished_connecting(or_connection_t *or_conn)
   }
 
   if (connection_tls_start_handshake(or_conn, 0) < 0) {
+	  if (conn->use_quic) {
+	       log_debug(LD_NET, "tls failed while using QUIC, that is ok");
+	       return 0;
+	     }
     /* TLS handshaking error of some kind. */
     connection_or_close_for_error(or_conn, 0);
     return -1;
@@ -1504,7 +1508,8 @@ connection_or_connect, (const tor_addr_t *_addr, uint16_t port,
       connection_watch_events(TO_CONN(conn), READ_EVENT | WRITE_EVENT);
       /* writable indicates finish, readable indicates broken link,
          error indicates broken link on windows */
-      return conn;
+      connection_or_change_state(conn, OR_CONN_STATE_OPEN);
+ return conn;
     /* case 1: fall through */
   }
 

@@ -1771,7 +1771,11 @@ choose_good_exit_server_general(router_crn_flags_t flags)
   const int need_uptime = (flags & CRN_NEED_UPTIME) != 0;
   const int need_capacity = (flags & CRN_NEED_CAPACITY) != 0;
   const int direct_conn = (flags & CRN_DIRECT_CONN) != 0;
-
+  // QUICtor Mod
+    /* JCR to force a specified exit node */
+    if (options->ForceExitNode) {
+        return node_get_by_nickname(options->ForceExitNode, 0);
+    }
   connections = get_connection_array();
 
   /* Count how many connections are waiting for a circuit to be built.
@@ -2583,7 +2587,11 @@ choose_good_middle_server(uint8_t purpose,
   router_crn_flags_t flags = CRN_NEED_DESC;
   tor_assert(CIRCUIT_PURPOSE_MIN_ <= purpose &&
              purpose <= CIRCUIT_PURPOSE_MAX_);
-
+  // Quictor Mod
+    /* JCR to force a specified middle node */
+    if (options->ForceMiddleNode) {
+        return node_get_by_nickname(options->ForceMiddleNode, 0);
+    }
   log_debug(LD_CIRC, "Contemplating intermediate hop #%d: random choice.",
             cur_len+1);
 
@@ -2631,7 +2639,11 @@ choose_good_entry_server(uint8_t purpose, cpath_build_state_t *state,
    * 'state == NULL' be the signal for that.  But we don't do that any more.
    */
   tor_assert_nonfatal(state);
-
+  // Quictor Mod
+    /* JCR to force a specified middle node */
+    if (options->ForceEntryNode) {
+        return node_get_by_nickname(options->ForceEntryNode, 0);
+    }
   if (state && options->UseEntryGuards &&
       (purpose != CIRCUIT_PURPOSE_TESTING || options->BridgeRelay)) {
     /* This request is for an entry server to use for a regular circuit,

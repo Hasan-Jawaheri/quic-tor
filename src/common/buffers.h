@@ -12,6 +12,7 @@
 #ifndef TOR_BUFFERS_H
 #define TOR_BUFFERS_H
 
+#include "quicsock/quicsock.h"
 #include "compat.h"
 #include "torint.h"
 #include "testsupport.h"
@@ -19,6 +20,12 @@
 typedef struct buf_t buf_t;
 
 struct tor_compress_state_t;
+
+// Assume libquic is always compiled in; might want to change later
+#define tor_quicsock_t quicsock_t
+#define TOR_QUICSOCK_T_FORMAT "%p"
+#define QUICSOCK_OK(s) ((s) != NULL)
+#define TOR_INVALID_QUICSOCK NULL
 
 buf_t *buf_new(void);
 buf_t *buf_new_with_capacity(size_t size);
@@ -41,6 +48,18 @@ int buf_read_from_socket(buf_t *buf, tor_socket_t s, size_t at_most,
 
 int buf_flush_to_socket(buf_t *buf, tor_socket_t s, size_t sz,
                         size_t *buf_flushlen);
+
+
+int read_to_buf_quic(tor_quicsock_t s, size_t at_most, buf_t *buf, int *reached_eof,
+                int *socket_error);
+int flush_buf_quic(tor_quicsock_t s, buf_t *buf, size_t sz);
+int write_to_buf_quic(const char *string, size_t string_len, buf_t *buf,
+                      quicsock_stream_id_t stream_id);
+#define generic_buffer_add_quic(b,dat,len,stream) write_to_buf_quic((dat),(len),(b),(stream))
+
+
+
+
 
 int buf_add(buf_t *buf, const char *string, size_t string_len);
 void buf_add_string(buf_t *buf, const char *string);
@@ -87,6 +106,9 @@ typedef struct chunk_t {
 #endif
   char *data; /**< A pointer to the first byte of data stored in <b>mem</b>. */
   uint32_t inserted_time; /**< Timestamp when this chunk was inserted. */
+  quicsock_stream_id_t stream_id; /** QUIC mod: the stream ID passed to QUIC,
+                                   *  will be 0 we are not using QUIC or it is
+                                   *  not a relayed cell */
   char mem[FLEXIBLE_ARRAY_MEMBER]; /**< The actual memory used for storage in
                 * this chunk. */
 } chunk_t;
