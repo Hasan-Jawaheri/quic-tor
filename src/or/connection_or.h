@@ -42,6 +42,7 @@ MOCK_DECL(or_connection_t *,
            const char *id_digest,
            const ed25519_public_key_t *ed_id,
            channel_tls_t *chan));
+int connection_or_accepted_quic_conn(or_connection_t* or_conn);
 
 void connection_or_close_normally(or_connection_t *orconn, int flush);
 MOCK_DECL(void,connection_or_close_for_error,

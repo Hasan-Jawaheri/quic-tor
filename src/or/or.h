@@ -1315,8 +1315,6 @@ struct buf_t;
  * to fill and drain these buffers.
  */
 typedef struct connection_t {
-	/** For QUIC SOCK usage */
-	    tor_quicsock_t q_sock;
   uint32_t magic; /**< For memory debugging: must equal one of
                    * *_CONNECTION_MAGIC. */
 
@@ -1418,8 +1416,9 @@ typedef struct connection_t {
    * Only used if we're configured to emit CONN_BW events. */
   uint32_t n_written_conn_bw;
 
-
-    unsigned int use_quic:1; /**< Boolean: do we use quic socket */
+	/** For QUIC SOCK usage */
+  unsigned int use_quic:1; /**< Boolean: do we use quic socket */
+	tor_quicsock_t q_sock;
 } connection_t;
 
 /** Subtype of connection_t; used for a listener socket. */

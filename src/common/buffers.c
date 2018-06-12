@@ -131,6 +131,7 @@ chunk_new_with_alloc_size(size_t alloc)
 {
   chunk_t *ch;
   ch = tor_malloc(alloc);
+  ch->stream_id = 0;
   ch->next = NULL;
   ch->datalen = 0;
 #ifdef DEBUG_CHUNK_ALLOC
@@ -723,10 +724,8 @@ flush_chunk_quic(tor_quicsock_t s, buf_t *buf, chunk_t *chunk, size_t sz) {
   ssize_t write_result;
   if (sz > chunk->datalen)
     sz = chunk->datalen;
- log_info(LD_GENERAL,"Lamiaa : before qs_send ");
   //print_cell_to_log(chunk->data, sz);
   write_result = qs_send(s, chunk->data, sz, chunk->stream_id);
- log_info(LD_GENERAL,"Lamiaa : after qs_send ");
   if (write_result < 0) {
     log_warn(LD_NET,"QUIC write failed, returning.");
     return -1;

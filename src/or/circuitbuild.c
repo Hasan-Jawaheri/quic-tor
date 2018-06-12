@@ -561,7 +561,7 @@ circuit_handle_first_hop(origin_circuit_t *circ)
       }
     }
 
-    log_debug(LD_CIRC,"connecting in progress (or finished). Good.");
+    log_info(LD_CIRC,"connecting in progress (or finished). Good.");
     /* return success. The onion/circuit/etc will be taken care of
      * automatically (may already have been) whenever n_chan reaches
      * OR_CONN_STATE_OPEN.

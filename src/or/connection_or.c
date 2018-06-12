@@ -59,6 +59,8 @@
 #include "torcert.h"
 #include "channelpadding.h"
 
+static int connection_or_init_quic_connection(or_connection_t* or_conn, int started_here);
+
 static int connection_tls_finish_handshake(or_connection_t *conn);
 static int connection_or_launch_v3_or_handshake(or_connection_t *conn);
 static int connection_or_process_cells_from_inbuf(or_connection_t *conn);
@@ -695,7 +697,7 @@ connection_or_finished_connecting(or_connection_t *or_conn)
 
   if (connection_tls_start_handshake(or_conn, 0) < 0) {
 	  if (conn->use_quic) {
-	       log_debug(LD_NET, "tls failed while using QUIC, that is ok");
+	       log_notice(LD_NET, "tls failed while using QUIC, that is ok");
 	       return 0;
 	     }
     /* TLS handshaking error of some kind. */
@@ -1406,7 +1408,7 @@ connection_or_connect, (const tor_addr_t *_addr, uint16_t port,
   tor_addr_t proxy_addr;
   uint16_t proxy_port;
   int proxy_type;
-
+  
   tor_assert(_addr);
   tor_assert(id_digest);
   tor_addr_copy(&addr, _addr);
@@ -1422,6 +1424,7 @@ connection_or_connect, (const tor_addr_t *_addr, uint16_t port,
   }
 
   conn = or_connection_new(CONN_TYPE_OR, tor_addr_family(&addr));
+  conn->base_.use_quic = 1;
 
   /*
    * Set up conn so it's got all the data we need to remember for channels
@@ -1508,7 +1511,9 @@ connection_or_connect, (const tor_addr_t *_addr, uint16_t port,
       connection_watch_events(TO_CONN(conn), READ_EVENT | WRITE_EVENT);
       /* writable indicates finish, readable indicates broken link,
          error indicates broken link on windows */
-      connection_or_change_state(conn, OR_CONN_STATE_OPEN);
+      if (conn->base_.use_quic) {
+        connection_or_init_quic_connection(conn, 1);
+      }
  return conn;
     /* case 1: fall through */
   }
@@ -1667,8 +1672,8 @@ connection_tls_continue_handshake(or_connection_t *conn)
 
   switch (result) {
     CASE_TOR_TLS_ERROR_ANY:
-    log_info(LD_OR,"tls error [%s]. breaking connection.",
-             tor_tls_err_to_string(result));
+    log_info(LD_OR,"tls error [%s]. breaking connection. (CONN TYPE IS %d, STATE %d, qs=%d, uq=%d)",
+             tor_tls_err_to_string(result), conn->base_.type, conn->base_.state, conn->base_.q_sock, conn->base_.use_quic);
       return -1;
     case TOR_TLS_DONE:
       if (! tor_tls_used_v1_handshake(conn->tls)) {
@@ -2556,7 +2561,7 @@ connection_or_send_certs_cell(or_connection_t *conn)
   certs_cell = certs_cell_new();
 
   /* Start adding certs.  First the link cert or auth1024 cert. */
-  if (conn_in_server_mode) {
+  if (own_link_cert) {
     tor_assert_nonfatal(own_link_cert);
     add_x509_cert(certs_cell,
                   OR_CERT_TYPE_TLS_LINK, own_link_cert);
@@ -2809,41 +2814,43 @@ connection_or_compute_authenticate_cell_body(or_connection_t *conn,
     crypto_digest_get_digest(client_d, (char*)auth->clog, 32);
   }
 
-  {
-    /* Digest of cert used on TLS link : 32 octets. */
-    tor_x509_cert_t *cert = NULL;
-    if (server) {
-      cert = tor_tls_get_own_cert(conn->tls);
+  if (!TO_CONN(conn)->use_quic) {
+    {
+      /* Digest of cert used on TLS link : 32 octets. */
+      tor_x509_cert_t *cert = NULL;
+      if (server) {
+        cert = tor_tls_get_own_cert(conn->tls);
+      } else {
+        cert = tor_tls_get_peer_cert(conn->tls); // conn->handshake_state->certs->ed_sign_link;
+      }
+      if (!cert) {
+        log_warn(LD_OR, "Unable to find cert when making %s data. (im %s)",
+                authtype_str, server ? "server" : "client");
+        goto err;
+      }
+
+      memcpy(auth->scert,
+            tor_x509_cert_get_cert_digests(cert)->d[DIGEST_SHA256], 32);
+
+      tor_x509_cert_free(cert);
+    }
+
+    /* HMAC of clientrandom and serverrandom using master key : 32 octets */
+    if (old_tlssecrets_algorithm) {
+      tor_tls_get_tlssecrets(conn->tls, auth->tlssecrets);
     } else {
-      cert = tor_tls_get_peer_cert(conn->tls);
+      char label[128];
+      tor_snprintf(label, sizeof(label),
+                  "EXPORTER FOR TOR TLS CLIENT BINDING %s", authtype_str);
+      tor_tls_export_key_material(conn->tls, auth->tlssecrets,
+                                  auth->cid, sizeof(auth->cid),
+                                  label);
     }
-    if (!cert) {
-      log_warn(LD_OR, "Unable to find cert when making %s data.",
-               authtype_str);
-      goto err;
-    }
-
-    memcpy(auth->scert,
-           tor_x509_cert_get_cert_digests(cert)->d[DIGEST_SHA256], 32);
-
-    tor_x509_cert_free(cert);
-  }
-
-  /* HMAC of clientrandom and serverrandom using master key : 32 octets */
-  if (old_tlssecrets_algorithm) {
-    tor_tls_get_tlssecrets(conn->tls, auth->tlssecrets);
-  } else {
-    char label[128];
-    tor_snprintf(label, sizeof(label),
-                 "EXPORTER FOR TOR TLS CLIENT BINDING %s", authtype_str);
-    tor_tls_export_key_material(conn->tls, auth->tlssecrets,
-                                auth->cid, sizeof(auth->cid),
-                                label);
   }
 
   /* 8 octets were reserved for the current time, but we're trying to get out
-   * of the habit of sending time around willynilly.  Fortunately, nothing
-   * checks it.  That's followed by 16 bytes of nonce. */
+  * of the habit of sending time around willynilly.  Fortunately, nothing
+  * checks it.  That's followed by 16 bytes of nonce. */
   crypto_rand((char*)auth->rand, 24);
 
   ssize_t maxlen = auth1_encoded_len(auth, ctx);
@@ -2977,3 +2984,49 @@ connection_or_send_authenticate_cell,(or_connection_t *conn, int authtype))
   return 0;
 }
 
+int connection_or_accepted_quic_connection(or_connection_t* or_conn) {
+  connection_t* conn = TO_CONN(or_conn);
+  channel_listener_t *chan_listener;
+  channel_t *chan;
+
+  control_event_or_conn_status(or_conn, OR_CONN_EVENT_NEW, 0);
+
+  /* Incoming connections will need a new channel passed to the
+  * channel_tls_listener */
+  tor_assert(!(or_conn->chan));
+  chan_listener = channel_tls_get_listener();
+  if (!chan_listener) {
+    chan_listener = channel_tls_start_listener();
+    command_setup_listener(chan_listener);
+  }
+  chan = channel_tls_handle_incoming(or_conn);
+  channel_listener_queue_incoming(chan_listener, chan);
+
+  return connection_or_init_quic_connection(or_conn, 0);
+}
+
+static int connection_or_init_quic_connection(or_connection_t* or_conn, int started_here) {
+  connection_t* conn = TO_CONN(or_conn);
+
+  or_conn->tls = tor_tls_new(-1, 1 - started_here);
+  if (!or_conn->tls) {
+    log_warn(LD_BUG,"tor_tls_new failed. Closing.");
+    return -1;
+  }
+
+  tor_tls_set_logged_address(or_conn->tls, // XXX client and relay?
+      escaped_safe_str(conn->address));
+
+  connection_start_writing(conn);
+  connection_start_reading(conn);
+
+  circuit_build_times_network_is_live(get_circuit_build_times_mutable());
+
+  connection_or_change_state(conn, OR_CONN_STATE_OR_HANDSHAKING_V3);
+  connection_init_or_handshake_state(or_conn, started_here);
+  if (started_here) {
+    connection_or_send_versions(conn, 1);
+  }
+
+  return 0;
+}

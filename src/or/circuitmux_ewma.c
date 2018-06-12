@@ -662,7 +662,7 @@ get_circuit_priority_halflife(const or_options_t *options,
   /* We should never go below the EPSILON else we would consider it disabled
    * and we can't have that. */
   if (halflife < EPSILON) {
-    log_warn(LD_CONFIG, "CircuitPriorityHalflife is too small (%f). "
+    log_info(LD_CONFIG, "CircuitPriorityHalflife is too small (%f). "
                         "Adjusting to the smallest value allowed: %f.",
              halflife, halflife_default);
     halflife = halflife_default;

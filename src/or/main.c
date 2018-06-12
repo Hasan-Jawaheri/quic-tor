@@ -295,33 +295,30 @@ connection_add_impl(connection_t *conn, int is_connecting)
   tor_assert(conn->conn_array_index == -1); /* can only connection_add once */
   conn->conn_array_index = smartlist_len(connection_array);
   smartlist_add(connection_array, conn);
-
+  
   (void) is_connecting;
   if (conn->use_quic) {
-  	    // Do the handshakes with QUIC
-  	    int fd = qs_get_fd(conn->q_sock);
-  	    tor_assert(tor_libevent_get_base() != NULL);
-  	    tor_assert(conn->q_sock != NULL);
+    int fd = qs_get_fd(conn->q_sock);
+    tor_assert(tor_libevent_get_base() != NULL);
+    tor_assert(conn->q_sock != NULL);
 
-  	    if (QUICSOCK_OK(conn->q_sock) || conn->linked) {
-  	      conn->read_event = tor_event_new(tor_libevent_get_base(),
-  	           fd, EV_READ|EV_PERSIST, conn_read_callback, conn);
-  	      conn->write_event = tor_event_new(tor_libevent_get_base(),
-  	                 fd, EV_WRITE|EV_PERSIST, conn_write_callback, conn);
-  	            /* XXXX CHECK FOR NULL RETURN! */
-  	          }
-
-  	          log_debug(LD_NET,"Adding QUIC conn: new conn type %s, socket %d, address %s, n_conns %d.",
-  	                    conn_type_to_string(conn->type), qs_get_fd(conn->q_sock), conn->address,
-  	                    smartlist_len(connection_array));
-  	        } else
+    if (QUICSOCK_OK(conn->q_sock) || conn->linked) {
+      conn->read_event = tor_event_new(tor_libevent_get_base(),
+            fd, EV_READ|EV_PERSIST, conn_read_callback, conn);
+      conn->write_event = tor_event_new(tor_libevent_get_base(),
+                  fd, EV_WRITE|EV_PERSIST, conn_write_callback, conn);
+            /* XXXX CHECK FOR NULL RETURN! */
+    }
+  } else {
     if (SOCKET_OK(conn->s) || conn->linked) {
       conn->read_event = tor_event_new(tor_libevent_get_base(),
-           conn->s, EV_READ|EV_PERSIST, conn_read_callback, conn);
+            conn->s, EV_READ|EV_PERSIST, conn_read_callback, conn);
       conn->write_event = tor_event_new(tor_libevent_get_base(),
-           conn->s, EV_WRITE|EV_PERSIST, conn_write_callback, conn);
+            conn->s, EV_WRITE|EV_PERSIST, conn_write_callback, conn);
       /* XXXX CHECK FOR NULL RETURN! */
     }
+  }
+
   return 0;
 }
 

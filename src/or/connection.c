@@ -435,13 +435,12 @@ connection_init(time_t now, connection_t *conn, int type, int socket_family)
 {
   static uint64_t n_connections_allocated = 1;
   conn->use_quic = 0;
+  conn->q_sock = NULL;
 
   switch (type) {
     case CONN_TYPE_OR:
     case CONN_TYPE_EXT_OR:
       conn->magic = OR_CONNECTION_MAGIC;
-      conn->use_quic = 1;
-      conn->q_sock = qs_open();
       break;
     case CONN_TYPE_EXIT:
       conn->magic = EDGE_CONNECTION_MAGIC;
@@ -460,8 +459,6 @@ connection_init(time_t now, connection_t *conn, int type, int socket_family)
 //		break;
 	CASE_QUIC_LISTENER_TYPE:
 		conn->magic = LISTENER_CONNECTION_MAGIC;
-		conn->use_quic = 1;
-		conn->q_sock = qs_open();
 		break;
 	CASE_NOQUIC_LISTENER_TYPE:
 		conn->magic = LISTENER_CONNECTION_MAGIC;
@@ -1178,9 +1175,7 @@ connection_listener_new_quic(const struct sockaddr *listensockaddr,
   tor_socket_t s = TOR_INVALID_SOCKET;  /* the socket we're NOT going to make */
   tor_quicsock_t q_sock = TOR_INVALID_QUICSOCK;
   or_options_t const *options = get_options();
-log_info(LD_BUG,"Lamiaa : quic listener .. ");
 
-  log_notice(LD_NET, "Enter QUIC listening function");
 #if defined(HAVE_PWD_H) && defined(HAVE_SYS_UN_H)
   const struct passwd *pw = NULL;
 #endif
@@ -1192,9 +1187,6 @@ log_info(LD_BUG,"Lamiaa : quic listener .. ");
       listensockaddr->sa_family == AF_INET6) {
 
     tor_addr_from_sockaddr(&addr, listensockaddr, &usePort);
-
-    log_notice(LD_NET, "QUIC Opening %s on %s",
-               conn_type_to_string(type), fmt_addrport(&addr, usePort));
 
     q_sock = qs_open();
 
@@ -1227,7 +1219,6 @@ log_info(LD_BUG,"Lamiaa : quic listener .. ");
       gotPort = usePort;
     } else {
       log_warn(LD_NET, "QUIC does not support port == 0 yet, exiting..");
-      log_info(LD_NET, "QUIC does not support port == 0 yet, exiting..");
       exit(1);
       /*
       tor_addr_t addr2;
@@ -1803,6 +1794,7 @@ connection_handle_listener_read_quic(connection_t *conn, int new_type)
     tor_addr_from_sockaddr(&addr, remote, &port);
 
     newconn = connection_new(new_type, conn->socket_family);
+    newconn->use_quic = 1;
     newconn->q_sock = q_news;
 
     /* remember the remote address */
@@ -2015,14 +2007,16 @@ connection_init_accepted_conn(connection_t *conn,
     case CONN_TYPE_EXT_OR:
       /* Initiate Extended ORPort authentication. */
       return connection_ext_or_start_auth(TO_OR_CONN(conn));
-    case CONN_TYPE_OR:
-      control_event_or_conn_status(TO_OR_CONN(conn), OR_CONN_EVENT_NEW, 0);
-      rv = connection_tls_start_handshake(TO_OR_CONN(conn), 1);
+    case CONN_TYPE_OR: {
+      return connection_or_accepted_quic_connection(TO_OR_CONN(conn));
+
+      /*rv = connection_tls_start_handshake(TO_OR_CONN(conn), 1);
       if (rv < 0) {
         connection_or_close_for_error(TO_OR_CONN(conn), 0);
       }
-      return rv;
+      return rv;*/
       break;
+    }
     case CONN_TYPE_AP:
       memcpy(&TO_ENTRY_CONN(conn)->entry_cfg, &listener->entry_cfg,
              sizeof(entry_port_cfg_t));
@@ -2189,8 +2183,6 @@ connection_connect_sockaddr_quic(connection_t *conn,
   tor_assert(sa);
   tor_assert(socket_error);
 
-  log_notice(LD_NET, "Entered QUIC specific connection function!\n");
-
   if (get_options()->DisableNetwork) {
     /* We should never even try to connect anyplace if DisableNetwork is set.
      * Warn if we do, and refuse to make the connection. */
@@ -2202,7 +2194,7 @@ connection_connect_sockaddr_quic(connection_t *conn,
     return -1;
   }
 
-  s = conn->q_sock;
+  s = qs_open();
   // handle the alarm needed for QUIC since we are going to use this socket
   //quicsock_event_handler_t e_handler = qs_get_event_handler(s);
   //tor_assert(e_handler != NULL);
@@ -2231,7 +2223,6 @@ connection_connect_sockaddr_quic(connection_t *conn,
   if (bindaddr && qs_bind(s, bindaddr, bindaddr_len) < 0) {
     log_warn(LD_NET,"Error binding network socket");
     qs_close(s);
-    conn->q_sock = NULL;
     return -1;
   }
 
@@ -2257,9 +2248,10 @@ connection_connect_sockaddr_quic(connection_t *conn,
     */
     log_warn(LD_NET,"Error connect() failed network socket");
     qs_close(s);
-    conn->q_sock = NULL;
     return -1;
   }
+
+  conn->q_sock = s;
 
   /* it succeeded. we're connected. */
   log_fn(inprogress ? LOG_DEBUG : LOG_INFO, LD_NET,
@@ -3823,7 +3815,7 @@ connection_read_to_buf_quic(connection_t *conn, ssize_t *max_to_read,
   //}
 
   tor_assert(conn->type == CONN_TYPE_OR);
-  tor_assert(conn->state == OR_CONN_STATE_OPEN);
+  //tor_assert(conn->state >= OR_CONN_STATE_CONNECTING);
   //or_connection_t *or_conn = TO_OR_CONN(conn);
   int reached_eof = 0;
 
@@ -3872,6 +3864,7 @@ connection_read_to_buf_quic(connection_t *conn, ssize_t *max_to_read,
    * have reached 0 on a different conn, and this guy needs to
    * know to stop reading. */
   connection_consider_empty_read_buckets(conn);
+    
   return 0;
 }
 
@@ -3909,8 +3902,7 @@ connection_buf_read_from_socket(connection_t *conn, ssize_t *max_to_read,
   }
 
   if (connection_speaks_cells(conn) &&
-      conn->state > OR_CONN_STATE_PROXY_HANDSHAKING&&
-      !(conn->use_quic)) {
+      conn->state > OR_CONN_STATE_PROXY_HANDSHAKING) {
     int pending;
     or_connection_t *or_conn = TO_OR_CONN(conn);
     size_t initial_size;
@@ -4004,17 +3996,11 @@ connection_buf_read_from_socket(connection_t *conn, ssize_t *max_to_read,
   } else {
     /* !connection_speaks_cells, !conn->linked_conn. */
     int reached_eof = 0;
-    if (conn->use_quic) {
-         // FIXME int vs. SSIZE_T
-         result = (int) qs_recv(conn->q_sock, conn->inbuf, at_most);
-         reached_eof = (result > 0) && (result < at_most);
-       } else {
     CONN_LOG_PROTECT(conn,
                      result = buf_read_from_socket(conn->inbuf, conn->s,
                                                    at_most,
                                                    &reached_eof,
                                                    socket_error));
-       }
     if (reached_eof)
       conn->inbuf_reached_eof = 1;
 
@@ -4122,13 +4108,11 @@ connection_outbuf_too_full(connection_t *conn)
 static int
 connection_handle_write_impl_quic(connection_t *conn, int force)
 {
-  log_debug(LD_NET, "trying to write: use_quic %d", conn->use_quic);
   int result = -1;
   ssize_t max_to_write;
   time_t now = approx_time();
 
   tor_assert(!connection_is_listener(conn));
-log_info(LD_GENERAL,"Lamiaa : connection state = %d",conn->state);
   if (conn->marked_for_close || !QUICSOCK_OK(conn->q_sock)) {
     log_warn(LD_BUG, "marked for close or q_sock is not ok");
     return 0; /* do nothing */
@@ -4143,7 +4127,9 @@ log_info(LD_GENERAL,"Lamiaa : connection state = %d",conn->state);
 
   /* Sometimes, "writable" means "connected". */
   if (connection_state_is_connecting(conn)) {
-    log_warn(LD_BUG, "QUIC connection is in connection state %d?", conn->state);
+    /* The connection is successful. */
+    if (connection_finished_connecting(conn)<0)
+      return -1;
   }
 
   max_to_write = force ? (ssize_t)conn->outbuf_flushlen
@@ -4203,7 +4189,6 @@ log_info(LD_GENERAL,"Lamiaa : connection state = %d",conn->state);
       return -1;
     }
 
-    log_debug(LD_OR,"normal return");
     return 0;
   }
 
@@ -4650,7 +4635,11 @@ connection_write_to_buf_impl_generic, (const char *string, size_t len,
                                                 string, len, done));
     written = buf_datalen(conn->outbuf) - old_datalen;
   } else {
-	    CONN_LOG_PROTECT(conn, r = write_to_buf_quic(string, len, conn->outbuf, stream_id));
+      if (conn->use_quic) {
+  	    CONN_LOG_PROTECT(conn, r = write_to_buf_quic(string, len, conn->outbuf, stream_id));
+      } else {
+        CONN_LOG_PROTECT(conn, r = buf_add(conn->outbuf, string, len));
+      }
 
     written = len;
   }
@@ -5580,8 +5569,6 @@ assert_connection_ok(connection_t *conn, time_t now)
     }
 //    tor_assert(conn->addr && conn->port);
     tor_assert(conn->address);
-    if (!conn->use_quic && conn->state > OR_CONN_STATE_PROXY_HANDSHAKING)
-          tor_assert(or_conn->tls);
     if (!conn->use_quic &&conn->state > OR_CONN_STATE_PROXY_HANDSHAKING)
       tor_assert(or_conn->tls);
   }

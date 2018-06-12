@@ -2319,7 +2319,7 @@ cell_queue_append_packed_copy(circuit_t *circ, cell_queue_t *queue,
 {
   packed_cell_t *copy = packed_cell_copy(cell, wide_circ_ids);
   // QUIC mod: TEMP -> ideally add into packed_cell_copy()
-   copy->stream_id = stream_id; // 0 for most cases(void)circ;
+  copy->stream_id = stream_id; // 0 for most cases(void)circ;
   (void)exitward;
   (void)use_stats;
 
