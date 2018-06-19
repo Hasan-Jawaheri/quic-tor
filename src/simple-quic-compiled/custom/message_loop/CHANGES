@@ -1,0 +1,2 @@
+- Remove dependency on "base/trace_event/trace_event.h"
+- Remove dependency on "base/debug/task_annotator.h"

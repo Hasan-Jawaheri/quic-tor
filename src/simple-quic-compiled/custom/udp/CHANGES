@@ -1,0 +1,2 @@
+- Remove dependency on "net/base/network_change_notifier.h"
+- Remove dependency on "net/base/network_activity_monitor.h"
