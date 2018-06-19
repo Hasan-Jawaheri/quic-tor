@@ -1,0 +1,21 @@
+# Hashes of file build rules.
+04344c7c3315298b6edc4a5e08931a7e boringssl/CMakeFiles/run_tests
+8858ec74f0825d16e0122d26cdb3e550 boringssl/crypto/aes/aes-x86_64.S
+a82bd91802aea40d450d01749aaae6a5 boringssl/crypto/aes/aesni-x86_64.S
+65e1941d51bf4e76f17ba0e9b59e838f boringssl/crypto/aes/bsaes-x86_64.S
+4e3b11a2dd516da3f4c27383233bb23a boringssl/crypto/aes/vpaes-x86_64.S
+a01d6910e0982af39356b848470265f6 boringssl/crypto/bn/rsaz-avx2.S
+2efc1e8cdf0b35b99d5c306155a3b171 boringssl/crypto/bn/rsaz-x86_64.S
+551178c687b83bb3d48a3ef9dee15f81 boringssl/crypto/bn/x86_64-mont.S
+31ebd90ee4e13a2eec7eb0b44e8d9c2d boringssl/crypto/bn/x86_64-mont5.S
+b8b05cfd8bed311db6a82f58ed87e2b3 boringssl/crypto/ec/p256-x86_64-asm.S
+0e3cb50af011d1f07aae590be1667238 boringssl/crypto/err/err_data.c
+f0da97e03353e08545ebcaed2f167fe7 boringssl/crypto/md5/md5-x86_64.S
+86e6fff5a49bab42ecfc62f1a1f7c54a boringssl/crypto/modes/aesni-gcm-x86_64.S
+635049dd4a05e432dce76c00f6cafad5 boringssl/crypto/modes/ghash-x86_64.S
+17b103dda0e19584c3b3eed379f93f25 boringssl/crypto/rand/rdrand-x86_64.S
+6829aa21ff3397072e2c295a357fe45a boringssl/crypto/rc4/rc4-md5-x86_64.S
+6c38d1ab0bfab3dd560c2ba271adc69f boringssl/crypto/rc4/rc4-x86_64.S
+f0d64403d00aca3b692341bb7f1e4ee8 boringssl/crypto/sha/sha1-x86_64.S
+aa0cb7223a391ffb1ade952531694d06 boringssl/crypto/sha/sha256-x86_64.S
+1948a40c18f699aa48c4f5e8c8e795ac boringssl/crypto/sha/sha512-x86_64.S

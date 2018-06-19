@@ -1,0 +1,36 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../boringssl/include/openssl/base.h
+stddef.h
+-
+stdint.h
+-
+sys/types.h
+-
+openssl/opensslfeatures.h
+-
+
+../boringssl/include/openssl/des.h
+openssl/base.h
+-
+
+../boringssl/include/openssl/opensslfeatures.h
+
+/home/malsabah/Desktop/QuicTor/quictor/src/simple-quic/lib/libquic/boringssl/crypto/des/des.c
+openssl/des.h
+-
+stdlib.h
+-
+internal.h
+/home/malsabah/Desktop/QuicTor/quictor/src/simple-quic/lib/libquic/boringssl/crypto/des/internal.h
+
+/home/malsabah/Desktop/QuicTor/quictor/src/simple-quic/lib/libquic/boringssl/crypto/des/internal.h
+openssl/base.h
+-
+

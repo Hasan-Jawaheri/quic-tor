@@ -1,0 +1,46 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../boringssl/include/openssl/base.h
+stddef.h
+-
+stdint.h
+-
+sys/types.h
+-
+openssl/opensslfeatures.h
+-
+
+../boringssl/include/openssl/cast.h
+openssl/base.h
+-
+
+../boringssl/include/openssl/opensslfeatures.h
+
+/home/malsabah/Desktop/QuicTor/quictor/src/simple-quic/lib/libquic/boringssl/decrepit/cast/cast.c
+openssl/cast.h
+-
+intrin.h
+-
+internal.h
+/home/malsabah/Desktop/QuicTor/quictor/src/simple-quic/lib/libquic/boringssl/decrepit/cast/internal.h
+../macros.h
+/home/malsabah/Desktop/QuicTor/quictor/src/simple-quic/lib/libquic/boringssl/decrepit/macros.h
+
+/home/malsabah/Desktop/QuicTor/quictor/src/simple-quic/lib/libquic/boringssl/decrepit/cast/cast_tables.c
+openssl/base.h
+-
+internal.h
+/home/malsabah/Desktop/QuicTor/quictor/src/simple-quic/lib/libquic/boringssl/decrepit/cast/internal.h
+
+/home/malsabah/Desktop/QuicTor/quictor/src/simple-quic/lib/libquic/boringssl/decrepit/cast/internal.h
+openssl/base.h
+-
+
+/home/malsabah/Desktop/QuicTor/quictor/src/simple-quic/lib/libquic/boringssl/decrepit/macros.h
+

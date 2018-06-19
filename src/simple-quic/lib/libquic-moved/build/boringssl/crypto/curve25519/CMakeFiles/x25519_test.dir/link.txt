@@ -1,0 +1,1 @@
+/usr/bin/c++     -Wall -fpic -std=gnu++11 -DNDEBUG -Wall -Werror -Wsign-compare -Wmissing-field-initializers -ggdb -std=c++0x -fvisibility=hidden -Wshadow -O3 -DNDEBUG   CMakeFiles/x25519_test.dir/x25519_test.cc.o  -o x25519_test -rdynamic ../libcrypto.a -lpthread 
